@@ -1,5 +1,6 @@
 import { api } from "@/api/client";
 import type { Balance, CreditTransaction, Page, PricingPlan } from "@/api/types";
+import { randomUUID } from "@/lib/utils";
 
 export const creditsApi = {
   async balance(): Promise<Balance> {
@@ -10,7 +11,7 @@ export const creditsApi = {
   async purchase(amount: number): Promise<CreditTransaction> {
     const res = await api.post<CreditTransaction>("/credits/purchase", {
       amount,
-      idempotency_key: crypto.randomUUID(),
+      idempotency_key: randomUUID(),
     });
     return res.data;
   },

@@ -1,0 +1,47 @@
+# Traefik static configuration.
+#
+# HTTP-only by default (development / no domain). To enable HTTPS with Let's Encrypt:
+#   1. Point a wildcard DNS record (*.yourdomain.com) at the VM.
+#   2. Set ACME_EMAIL and TRAEFIK_TLS=true in .env.
+#   3. Uncomment the `certificatesResolvers` block and the websecure redirection below.
+# The backend switches deployment router labels to websecure+letsencrypt automatically
+# when TRAEFIK_TLS=true.
+
+api:
+  dashboard: true
+  insecure: false # dashboard only via the `traefik` router with admin auth if enabled
+
+ping: {}
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+
+entryPoints:
+  web:
+    address: ":80"
+    # Uncomment to force HTTPS once TLS is enabled:
+    # http:
+    #   redirections:
+    #     entryPoint:
+    #       to: websecure
+    #       scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false # only containers with traefik.enable=true are routed
+    network: raw_ingress
+
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: ${ACME_EMAIL}
+#       storage: /letsencrypt/acme.json
+#       httpChallenge:
+#         entryPoint: web

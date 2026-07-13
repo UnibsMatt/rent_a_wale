@@ -1,0 +1,167 @@
+# Rent-a-Whale — production compose. `docker compose up -d --build` brings up the
+# whole platform. Copy .env.example → .env first.
+#
+# URL scheme (PLATFORM_DOMAIN=example.com):
+#   app.example.com          frontend SPA
+#   app.example.com/api/...  backend API (same-origin for the SPA)
+#   api.example.com          backend API (direct)
+#   <slug>.example.com       user deployments (Traefik labels, no host ports)
+
+name: rentawhale
+
+services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - raw_ingress
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - raw_ingress
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: raw_ingress
+      traefik.http.routers.rw-frontend.rule: Host(`app.${PLATFORM_DOMAIN:-localhost}`)
+      traefik.http.routers.rw-frontend.entrypoints: web
+      traefik.http.routers.rw-frontend.priority: "1"
+      traefik.http.services.rw-frontend.loadbalancer.server.port: "80"
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    command: ["api"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Root-equivalent host access by design (single-VM orchestration) — ADR-6.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - platform
+      - raw_ingress
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: raw_ingress
+      # Same-origin API for the SPA…
+      traefik.http.routers.rw-api.rule: Host(`app.${PLATFORM_DOMAIN:-localhost}`) && PathPrefix(`/api`)
+      traefik.http.routers.rw-api.entrypoints: web
+      traefik.http.routers.rw-api.priority: "10"
+      traefik.http.routers.rw-api.service: rw-api
+      # …plus a direct api host for tooling and the OpenAPI docs.
+      traefik.http.routers.rw-api-host.rule: Host(`api.${PLATFORM_DOMAIN:-localhost}`)
+      traefik.http.routers.rw-api-host.entrypoints: web
+      traefik.http.routers.rw-api-host.service: rw-api
+      traefik.http.services.rw-api.loadbalancer.server.port: "8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    command: ["worker"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    command: ["scheduler"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rentawhale}
+      POSTGRES_USER: ${POSTGRES_USER:-rentawhale}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  platform:
+    driver: bridge
+  raw_ingress:
+    # Fixed name: the backend attaches each deployment's web container to it,
+    # and Traefik discovers them by label.
+    name: raw_ingress
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  letsencrypt:

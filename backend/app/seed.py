@@ -39,6 +39,7 @@ DEFAULT_ALLOWED_IMAGES = [
     "adminer", "phpmyadmin", "portainer/portainer-ce",
     "busybox", "alpine", "hello-world",
     "minio/minio", "rabbitmq", "elasticsearch", "bitnami/*",
+    "heartexlabs/label-studio", "docker.io/library/*", "docker.io/*", "library/*",
 ]
 
 

@@ -1,0 +1,53 @@
+# Applies to the build context (repo root) for both docker/backend.Dockerfile and
+# docker/frontend.Dockerfile (docker-compose.yml uses `context: .` for each).
+
+# VCS / editor / OS
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Secrets — never ship into an image layer
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+letsencrypt/
+
+# Docs (not needed at runtime)
+docs/
+README.md
+*.md
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+backend/.venv/
+backend/venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/htmlcov/
+backend/.coverage
+backend/tests/
+
+# Node / frontend build artifacts (rebuilt inside the image)
+**/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/src/__tests__/
+
+# Logs
+*.log
+
+# Infra files not needed inside the app images
+# NOTE: docker/ itself is NOT excluded — both Dockerfiles COPY from it
+# (docker/backend-entrypoint.sh, docker/nginx/frontend.conf).
+traefik/
+scripts/
+docker-compose*.yml

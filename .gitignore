@@ -1,25 +1,41 @@
 # Environment / secrets
 .env
+.env.*
+!.env.example
 *.pem
+*.key
 letsencrypt/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
 .venv/
 venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.cache/
 htmlcov/
 .coverage
+.coverage.*
+backend/dist/
+backend/build/
 
 # Node
 node_modules/
 frontend/dist/
+frontend/build/
 frontend/coverage/
+*.local
+
+# Logs
+*.log
+npm-debug.log*
 
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
+*.swp
